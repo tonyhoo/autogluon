@@ -16,7 +16,7 @@ def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str
     bucket, prefix = s3_path_to_bucket_prefix(sync_path)
     logger.info("Waiting for worker nodes to upload checkpoints")
     finished_prefix = prefix + "finished" if prefix.endswith("/") else prefix + f"/finished"
-    while len(list_bucket_prefix_suffix_contains_s3(bucket=bucket, prefix=finished_prefix)) < num_nodes:
+    while len(list_bucket_prefix_suffix_contains_s3(bucket=bucket, prefix=finished_prefix)) < (num_nodes - 1):
         time.sleep(10)
     for i in range(1, trainer.world_size):
         logger.info(f"Syncing checkpoints from worker node {i}")
@@ -34,4 +34,8 @@ def upload_checkpoints(trainer: Trainer, path: str, sync_path: str):
     fname = f"{node_rank}.txt"
     open(fname, 'w').close()
     upload_file(bucket=bucket, prefix=finished_prefix, file_name=f"./{fname}")
-    os.remove(fname)
+    try:
+        os.remove(fname)
+    except:
+        # Already removed by another process
+        pass
