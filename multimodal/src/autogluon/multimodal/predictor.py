@@ -1494,6 +1494,9 @@ class MultiModalPredictor(ExportMixin):
         config.env.num_gpus = num_gpus
         config.env.precision = precision
         config.env.strategy = strategy if not config.env.strategy == DEEPSPEED_OFFLOADING else DEEPSPEED_OFFLOADING
+        if config.env.num_nodes is not None and config.env.num_nodes > 1:
+            # We dont support chcekpoint fusing for distributed training currently
+            config.optimization.top_k_average_method = "best"
         self._config = config
         # save artifacts for the current running, except for model checkpoint, which will be saved in trainer
         self.save(save_path, standalone=standalone)
