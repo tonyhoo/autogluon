@@ -72,16 +72,14 @@ def process_save_path(path, resume: bool = False, raise_if_exist: bool = True, i
                 "Specify a new path to avoid accidentally overwriting a saved predictor."
             )
         else:
-            if is_distributed:
-                path = None
-            else:
+            if not is_distributed:
                 logger.warning(
                     "A new predictor save path is created."
                     "This is to prevent you to overwrite previous predictor saved here."
                     "You could check current save path at predictor._save_path."
                     "If you still want to use this path, set resume=True"
                 )
-                path = path
+            path = path
 
     return path
 

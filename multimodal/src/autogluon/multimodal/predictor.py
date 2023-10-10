@@ -735,10 +735,8 @@ class MultiModalPredictor(ExportMixin):
             raise_if_exist=True,
             warn_if_exist=False,
             fit_called=fit_called,
-            # is_distributed=config.env.num_nodes is not None and config.env.num_nodes > 0,
             is_distributed=True if os.environ.get("NODE_RANK", None) is not None else False,
         )
-        print(f"env var: {os.environ.get('NODE_RANK', None)}")
 
         if tuning_data is None:
             train_data, tuning_data = self._split_train_tuning(
