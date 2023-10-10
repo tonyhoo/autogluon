@@ -12,13 +12,23 @@ logger = logging.getLogger(__name__)
 
 
 def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str, error_if_exists: bool = False):
+    """
+    Sync checkpoints saved on worker nodes to the master node
+    
+    Parameters
+    ----------
+    trainer
+        The pytorch lightnign trainer object
+    path
+        Path to sync the checkpoints 
+    """
     assert is_s3_url(sync_path), "Please provide a valid s3 path for synchronization"
     bucket, prefix = s3_path_to_bucket_prefix(sync_path)
     logger.info("Waiting for worker nodes to upload checkpoints")
     finished_prefix = prefix + "finished" if prefix.endswith("/") else prefix + f"/finished"
     while len(list_bucket_prefix_suffix_contains_s3(bucket=bucket, prefix=finished_prefix)) < (num_nodes - 1):
         time.sleep(10)
-    for i in range(1, trainer.world_size):
+    for i in range(1, trainer.num_nodes):
         logger.info(f"Syncing checkpoints from worker node {i}")
         worker_prefix = prefix + str(i) if prefix.endswith("/") else prefix + f"/{i}"
         download_s3_folder(bucket=bucket, prefix=worker_prefix + "/", local_path=path, error_if_exists=error_if_exists)
