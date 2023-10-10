@@ -21,7 +21,7 @@ def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str
     for i in range(1, trainer.world_size):
         logger.info(f"Syncing checkpoints from worker node {i}")
         worker_prefix = prefix + str(i) if prefix.endswith("/") else prefix + f"/{i}"
-        download_s3_folder(bucket=bucket, prefix=worker_prefix, local_path=path, error_if_exists=error_if_exists)
+        download_s3_folder(bucket=bucket, prefix=worker_prefix + "/", local_path=path, error_if_exists=error_if_exists)
         
         
 def upload_checkpoints(trainer: Trainer, path: str, sync_path: str):
