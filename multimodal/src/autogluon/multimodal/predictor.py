@@ -738,6 +738,7 @@ class MultiModalPredictor(ExportMixin):
             # is_distributed=config.env.num_nodes is not None and config.env.num_nodes > 0,
             is_distributed=True if os.environ.get("NODE_RANK", None) is not None else False,
         )
+        print(f"env var: {os.environ.get("NODE_RANK", None)}")
 
         if tuning_data is None:
             train_data, tuning_data = self._split_train_tuning(
@@ -1532,7 +1533,8 @@ class MultiModalPredictor(ExportMixin):
                 else 1,
                 plugins=[custom_checkpoint_plugin],
             )
-            trainer.strategy.config["zero_force_ds_cpu_optimizer"] = False
+            if isinstance(trainer.strategy, DeepSpeedStrategy):
+                trainer.strategy.config["zero_force_ds_cpu_optimizer"] = False
 
         with warnings.catch_warnings():
             warnings.filterwarnings(
