@@ -166,15 +166,15 @@ from .utils import (
     setup_detection_train_tuning_data,
     setup_save_path,
     split_hyperparameters,
+    sync_checkpoints,
     tensor_to_ndarray,
     turn_on_off_feature_column_info,
     update_config_by_rules,
     update_hyperparameters,
     update_tabular_config_by_resources,
     upgrade_config,
+    upload_checkpoints,
 )
-
-from pytorch_lightning.callbacks import ModelCheckpoint
 
 logger = logging.getLogger(__name__)
 
@@ -567,6 +567,7 @@ class MultiModalPredictor(ExportMixin):
         standalone: Optional[bool] = True,
         hyperparameter_tune_kwargs: Optional[dict] = None,
         clean_ckpts: Optional[bool] = True,
+        sync_path: Optional[str] = None,
     ):
         """
         Fit MultiModalPredictor predict label column of a dataframe based on the other columns,
@@ -674,6 +675,8 @@ class MultiModalPredictor(ExportMixin):
                         You don't need to worry about `metric` and `mode`. AutoGluon will figure it out by itself.
         clean_ckpts
             Whether to clean the checkpoints of each validation step after training.
+        sync_path
+            Remote synchronization path. This is required for distributed training checkpoitn syncrhonization.
 
         Returns
         -------
@@ -732,6 +735,7 @@ class MultiModalPredictor(ExportMixin):
             raise_if_exist=True,
             warn_if_exist=False,
             fit_called=fit_called,
+            is_distributed=config.env.num_nodes is not None and config.env.num_nodes > 0,
         )
 
         if tuning_data is None:
@@ -851,6 +855,7 @@ class MultiModalPredictor(ExportMixin):
             standalone=standalone,
             hpo_mode=hpo_mode,  # skip average checkpoint if in hpo mode
             clean_ckpts=clean_ckpts,
+            sync_path=sync_path,
         )
 
         if hpo_mode:
@@ -1101,6 +1106,7 @@ class MultiModalPredictor(ExportMixin):
         hpo_mode: bool = False,
         standalone: bool = True,
         clean_ckpts: bool = True,
+        sync_path: Optional[str] = None,
         **hpo_kwargs,
     ):
         pl.seed_everything(seed, workers=True)
@@ -1392,7 +1398,6 @@ class MultiModalPredictor(ExportMixin):
         logger.debug(f"validation_metric_name: {task.validation_metric_name}")
         logger.debug(f"minmax_mode: {minmax_mode}")
 
-        # checkpoint_callback = ModelCheckpoint(
         checkpoint_callback = AutoMMModelCheckpoint(
             dirpath=save_path,
             save_top_k=config.optimization.top_k,
@@ -1499,11 +1504,9 @@ class MultiModalPredictor(ExportMixin):
             trainer = pl.Trainer(
                 accelerator="gpu" if num_gpus > 0 else "auto",
                 devices=num_gpus if num_gpus > 0 else "auto",
-                num_nodes=3,
+                num_nodes=config.env.num_nodes,
                 precision=precision,
-                strategy="deepspeed_stage_3_offload",
-                # strategy="deepspeed_stage_3",
-                # strategy="fsdp",
+                strategy=strategy if strategy else "auto",
                 benchmark=False,
                 deterministic=config.env.deterministic,
                 max_epochs=config.optimization.max_epochs,
@@ -1545,15 +1548,16 @@ class MultiModalPredictor(ExportMixin):
             # We do not perform averaging checkpoint in the case of hpo for each trial
             # We only average the checkpoint of the best trial at the end in the master process.
             if not hpo_mode:
-                from autogluon.common.loaders.load_s3 import list_bucket_prefix_suffix_contains_s3
-                import time
-                while len(list_bucket_prefix_suffix_contains_s3(bucket="weisy-personal", prefix="multimodal_distributed/finished")) < 2:
-                    time.sleep(10)
-                from autogluon.common.utils.s3_utils import download_s3_folder
-                print(os.environ.get("WORLD_SIZE", "0"))
-                for i in range(1, 3):
-                    print("downloading")
-                    download_s3_folder(bucket="weisy-personal", prefix=f"multimodal_distributed/{i}/", local_path="./Multimodal_distributed", error_if_exists=False)
+                num_nodes = config.env.num_nodes
+                if not num_nodes:
+                    num_nodes = 1
+                if num_nodes > 1:
+                    sync_checkpoints(
+                        trainer=trainer,
+                        path=self.path,
+                        num_nodes=num_nodes,
+                        sync_path=sync_path,
+                    )
                 model = create_fusion_model(
                     config=config,
                     num_classes=self._output_shape,
@@ -1577,12 +1581,12 @@ class MultiModalPredictor(ExportMixin):
                 )
             self._best_score = trainer.callback_metrics[f"val_{self._validation_metric_name}"].item()
         else:
-            if os.environ.get("NODE_RANK") != "0":
-                from autogluon.common.utils.s3_utils import upload_s3_folder, upload_file
-                upload_s3_folder(bucket="weisy-personal", prefix=f"multimodal_distributed/{os.environ.get('NODE_RANK')}", folder_to_upload="./Multimodal_distributed")
-                fname = f"{os.environ.get('NODE_RANK')}.txt"
-                open(fname, 'w').close()
-                upload_file(bucket="weisy-personal", prefix=f"multimodal_distributed/finished", file_name=f"./{fname}")
+            if trainer.node_rank != 0:
+                upload_checkpoints(
+                    trainer=trainer,
+                    path=self.path,
+                    sync_path=sync_path,
+                )
             sys.exit(f"Training finished, exit the process with global_rank={trainer.global_rank}...")
 
     def _top_k_average(

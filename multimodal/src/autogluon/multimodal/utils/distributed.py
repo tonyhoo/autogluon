@@ -1,0 +1,37 @@
+import logging
+import os
+import time
+
+from pytorch_lightning import Trainer
+
+from autogluon.common.loaders.load_s3 import list_bucket_prefix_suffix_contains_s3
+from autogluon.common.utils.s3_utils import download_s3_folder, upload_s3_folder, upload_file, s3_path_to_bucket_prefix, is_s3_url
+
+
+logger = logging.getLogger(__name__)
+
+
+def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str, error_if_exists: bool = False):
+    assert is_s3_url(sync_path), "Please provide a valid s3 path for synchronization"
+    bucket, prefix = s3_path_to_bucket_prefix(sync_path)
+    logger.info("Waiting for worker nodes to upload checkpoints")
+    finished_prefix = prefix + "finished" if prefix.endswith("/") else prefix + f"/finished"
+    while len(list_bucket_prefix_suffix_contains_s3(bucket=bucket, prefix=finished_prefix)) < num_nodes:
+        time.sleep(10)
+    for i in range(1, trainer.world_size):
+        logger.info(f"Syncing checkpoints from worker node {i}")
+        worker_prefix = prefix + str(i) if prefix.endswith("/") else prefix + f"/{i}"
+        download_s3_folder(bucket=bucket, prefix=worker_prefix, local_path=path, error_if_exists=error_if_exists)
+        
+        
+def upload_checkpoints(trainer: Trainer, path: str, sync_path: str):
+    assert is_s3_url(sync_path), "Please provide a valid s3 path for synchronization"
+    bucket, prefix = s3_path_to_bucket_prefix(sync_path)
+    node_rank = trainer.node_rank
+    finished_prefix = prefix + "finished" if prefix.endswith("/") else prefix + f"/finished"
+    worker_prefix = prefix + str(node_rank) if prefix.endswith("/") else prefix + f"/{node_rank}"
+    upload_s3_folder(bucket=bucket, prefix=worker_prefix, folder_to_upload=path)
+    fname = f"{node_rank}.txt"
+    open(fname, 'w').close()
+    upload_file(bucket=bucket, prefix=finished_prefix, file_name=f"./{fname}")
+    os.remove(fname)
