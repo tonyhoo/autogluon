@@ -2,7 +2,6 @@
 See also, https://ts.gluon.ai/api/gluonts/gluonts.evaluation.html
 """
 import logging
-import warnings
 from typing import Optional
 
 import numpy as np
@@ -10,8 +9,8 @@ import pandas as pd
 
 from autogluon.timeseries import TimeSeriesDataFrame
 from autogluon.timeseries.dataset.ts_dataframe import ITEMID
-from autogluon.timeseries.utils.seasonality import get_seasonality
-from autogluon.timeseries.utils.warning_filters import evaluator_warning_filter
+from autogluon.timeseries.utils.datetime import get_seasonality
+from autogluon.timeseries.utils.warning_filters import warning_filter
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ class TimeSeriesEvaluator:
         * ``MASE``: mean absolute scaled error. See https://en.wikipedia.org/wiki/Mean_absolute_scaled_error
         * ``MAPE``: mean absolute percentage error. See https://en.wikipedia.org/wiki/Mean_absolute_percentage_error
         * ``sMAPE``: "symmetric" mean absolute percentage error. See https://en.wikipedia.org/wiki/Symmetric_mean_absolute_percentage_error
-        * ``mean_wQuantileLoss``: mean weighted quantile loss, i.e., average quantile loss scaled
+        * ``WQL``: mean weighted quantile loss, i.e., average quantile loss scaled
          by the total absolute values of the time series. See https://docs.aws.amazon.com/forecast/latest/dg/metrics.html#metrics-wQL
         * ``MSE``: mean squared error
         * ``RMSE``: root mean squared error
@@ -112,18 +111,18 @@ class TimeSeriesEvaluator:
         :meth:``~autogluon.timeseries.TimeSeriesEvaluator.check_get_evaluation_metric``.
     """
 
-    AVAILABLE_METRICS = ["MASE", "MAPE", "sMAPE", "mean_wQuantileLoss", "MSE", "RMSE", "WAPE", "RMSSE"]
+    AVAILABLE_METRICS = ["MASE", "MAPE", "sMAPE", "WQL", "MSE", "RMSE", "WAPE", "RMSSE"]
     METRIC_COEFFICIENTS = {
         "MASE": -1,
         "MAPE": -1,
         "sMAPE": -1,
-        "mean_wQuantileLoss": -1,
+        "WQL": -1,
         "MSE": -1,
         "RMSE": -1,
         "WAPE": -1,
         "RMSSE": -1,
     }
-    DEFAULT_METRIC = "mean_wQuantileLoss"
+    DEFAULT_METRIC = "WQL"
 
     def __init__(
         self,
@@ -174,7 +173,7 @@ class TimeSeriesEvaluator:
         y_pred = self._get_median_forecast(predictions)
         return self._safemean(symmetric_mape_per_item(y_true=y_true, y_pred=y_pred))
 
-    def _mean_wquantileloss(self, y_true: pd.Series, predictions: TimeSeriesDataFrame) -> float:
+    def _wql(self, y_true: pd.Series, predictions: TimeSeriesDataFrame) -> float:
         values_true = y_true.values[:, None]  # shape [N, 1]
         quantile_pred_columns = [col for col in predictions.columns if col != "mean"]
         values_pred = predictions[quantile_pred_columns].values  # shape [N, len(quantile_levels)]
@@ -268,10 +267,7 @@ class TimeSeriesEvaluator:
 
         assert data_future.index.equals(predictions.index), "Prediction and data indices do not match."
 
-        with evaluator_warning_filter(), warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=UserWarning)
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            warnings.simplefilter("ignore", category=FutureWarning)
+        with warning_filter():
             return self.metric_method(
                 y_true=data_future[self.target_column],
                 predictions=predictions,

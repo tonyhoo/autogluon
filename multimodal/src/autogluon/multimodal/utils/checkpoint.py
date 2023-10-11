@@ -4,12 +4,11 @@ import re
 import shutil
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
-from pytorch_lightning.strategies import DeepSpeedStrategy
-from pytorch_lightning.utilities.rank_zero import rank_zero_warn
+from lightning.pytorch.strategies import DeepSpeedStrategy
+from lightning.pytorch.utilities.rank_zero import rank_zero_warn
 
-from ..constants import AUTOMM, DEEPSPEED_STRATEGY
 from .cloud_io import _atomic_save
 from .cloud_io import _load as pl_load
 from .cloud_io import get_filesystem
@@ -73,7 +72,7 @@ def average_checkpoints(
 class AutoMMModelCheckpointIO(pl.plugins.CheckpointIO):
     """
     Class that customizes how checkpoints are saved. Saves either the entire model or only parameters that have been explicitly updated during training. The latter reduces memory footprint substantially when training very large models with parameter-efficient finetuning methods.
-    Class is based on pl.plugins.TorchCheckpointIO.
+    Class is based on plugins.TorchCheckpointIO.
 
     """
 
@@ -173,11 +172,11 @@ class AutoMMModelCheckpointIO(pl.plugins.CheckpointIO):
 
 class AutoMMModelCheckpoint(pl.callbacks.ModelCheckpoint):
     """
-    Class that inherits pl.callbacks.ModelCheckpoint. The purpose is to resolve the potential issues in lightning.
+    Class that inherits callbacks.ModelCheckpoint. The purpose is to resolve the potential issues in lightning.
 
     - Issue1:
 
-    It solves the issue described in https://github.com/PyTorchLightning/pytorch-lightning/issues/5582.
+    It solves the issue described in https://github.com/Lightning-AI/lightning/issues/5582.
     For ddp_spawn, the checkpoint_callback.best_k_models will be empty.
     Here, we resolve it by storing the best_models to "SAVE_DIR/best_k_models.yaml".
 
