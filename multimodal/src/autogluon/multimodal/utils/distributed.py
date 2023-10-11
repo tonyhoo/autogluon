@@ -11,7 +11,7 @@ from autogluon.common.utils.s3_utils import download_s3_folder, upload_s3_folder
 logger = logging.getLogger(__name__)
 
 
-def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str, error_if_exists: bool = False):
+def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str):
     """
     Sync checkpoints saved on worker nodes to the master node
     
@@ -20,7 +20,11 @@ def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str
     trainer
         The pytorch lightnign trainer object
     path
-        Path to sync the checkpoints 
+        Path to sync the checkpoints into. Typically this should be the path of the predictor
+    num_nodes
+        Number of nodes in the cluster including the master node
+    sync_path
+        The path to fetch checkpoints needed to be synced. This should be a valid s3 path
     """
     assert is_s3_url(sync_path), "Please provide a valid s3 path for synchronization"
     bucket, prefix = s3_path_to_bucket_prefix(sync_path)
@@ -31,10 +35,22 @@ def sync_checkpoints(trainer: Trainer, path: str, num_nodes: int, sync_path: str
     for i in range(1, trainer.num_nodes):
         logger.info(f"Syncing checkpoints from worker node {i}")
         worker_prefix = prefix + str(i) if prefix.endswith("/") else prefix + f"/{i}"
-        download_s3_folder(bucket=bucket, prefix=worker_prefix + "/", local_path=path, error_if_exists=error_if_exists)
+        download_s3_folder(bucket=bucket, prefix=worker_prefix + "/", local_path=path, error_if_exists=False)
         
         
 def upload_checkpoints(trainer: Trainer, path: str, sync_path: str):
+    """
+    Upload checkpoints to sync_path from worker nodes
+    
+    Parameters
+    ----------
+    trainer
+        The pytorch lightning trainer object
+    path
+        The path containing the checkpoints. Typically, this should be the path of the predictor
+    sync_path
+        The path to upload checkpoints needed to be synced. This should be a valid s3 path
+    """
     assert is_s3_url(sync_path), "Please provide a valid s3 path for synchronization"
     bucket, prefix = s3_path_to_bucket_prefix(sync_path)
     node_rank = trainer.node_rank
