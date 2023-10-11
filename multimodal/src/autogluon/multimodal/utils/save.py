@@ -99,12 +99,16 @@ def setup_save_path(
     if resume:
         save_path = process_save_path(path=old_save_path, resume=True)
     elif proposed_save_path is not None:  # TODO: distinguish DDP and existed predictor
-        save_path = process_save_path(path=proposed_save_path, raise_if_exist=(raise_if_exist and rank == 0), is_distributed=is_distributed)
+        save_path = process_save_path(
+            path=proposed_save_path, raise_if_exist=(raise_if_exist and rank == 0), is_distributed=is_distributed
+        )
     elif old_save_path is not None:
         if fit_called:
             save_path = process_save_path(path=old_save_path, raise_if_exist=False, is_distributed=is_distributed)
         else:
-            save_path = process_save_path(path=old_save_path, raise_if_exist=(raise_if_exist and rank == 0), is_distributed=is_distributed)
+            save_path = process_save_path(
+                path=old_save_path, raise_if_exist=(raise_if_exist and rank == 0), is_distributed=is_distributed
+            )
 
     if not resume:
         save_path = setup_outputdir(

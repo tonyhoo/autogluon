@@ -30,7 +30,7 @@ from .data import (
     split_train_tuning_data,
     turn_on_off_feature_column_info,
 )
-from .distributed import upload_checkpoints, sync_checkpoints
+from .distributed import sync_checkpoints, upload_checkpoints
 from .download import download, is_url
 from .environment import (
     check_if_packages_installed,
