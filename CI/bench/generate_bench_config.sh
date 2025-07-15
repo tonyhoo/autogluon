@@ -29,6 +29,8 @@ convert_time_to_seconds() {
 
 # Convert TIME_LIMIT to seconds for AWS infrastructure timeout
 TIME_LIMIT_SECONDS=$(convert_time_to_seconds "$TIME_LIMIT")
+# Ensure it's treated as an integer (remove quotes)
+TIME_LIMIT_SECONDS=$((TIME_LIMIT_SECONDS))
 
 if [ $MODULE == "tabular" ] || [ $MODULE == "timeseries" ]; then
     FRAMEWORK=AutoGluon_$PRESET:benchmark
